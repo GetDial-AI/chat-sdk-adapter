@@ -91,17 +91,6 @@ dial:{yourDialNumber}:{peerNumber}
 
 Every distinct pair is a distinct thread. Chat SDK's per-thread state (conversation history, context) is scoped per-pair, so simultaneous conversations don't leak into each other.
 
-## What the adapter can't do
-
-Honest limits, so nothing surprises you at runtime:
-
-- **No outbound call initiation.** Chat SDK's Adapter interface is text-oriented — `postMessage` sends a text message, there's no `chat.startCall()`. If you need to place voice calls programmatically, use `@getdial/sdk` directly (`client.makeCall(...)`) alongside this adapter.
-- **`editMessage` throws `NotImplementedError`.** SMS/MMS/iMessage have no server-side edit primitive.
-- **`deleteMessage` throws `NotImplementedError`.** Same reason.
-- **`addReaction` / `removeReaction` throw `NotImplementedError`.** No cross-channel reaction API today.
-- **`fetchMessages` returns an empty result.** The Dial SDK exposes `listMessages` with a `since` filter, but its cursor semantics don't map cleanly to Chat SDK's `FetchOptions` yet — live inbound still arrives via the webhook, so this only affects history backfill.
-- **`startTyping` is a no-op.** No channel here carries a typing indicator; the method is present to satisfy the interface.
-
 ## Design notes
 
 - **`@getdial/sdk` under the hood.** Outbound sends and transcript fetches go through the official Node SDK; no hand-rolled HTTP.
