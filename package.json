@@ -1,0 +1,68 @@
+{
+  "name": "@getdial/chat-sdk-adapter",
+  "version": "0.1.0",
+  "description": "Wire a Dial phone number into a Chat SDK bot — the same handler answers SMS, MMS, iMessage, and inbound voice.",
+  "author": "Dial <hello@getdial.ai>",
+  "license": "MIT",
+  "homepage": "https://getdial.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GetDial-AI/chat-sdk-adapter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/GetDial-AI/chat-sdk-adapter/issues"
+  },
+  "keywords": [
+    "chat-sdk",
+    "adapter",
+    "dial",
+    "sms",
+    "mms",
+    "imessage",
+    "voice",
+    "telephony",
+    "phone-number",
+    "ai-agents"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist coverage",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@chat-adapter/shared": "^4.20.0",
+    "@getdial/sdk": "^0.11.2"
+  },
+  "peerDependencies": {
+    "chat": "^4.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "chat": "^4.20.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
