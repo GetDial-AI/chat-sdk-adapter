@@ -1,9 +1,8 @@
 // Webhook signature verification.
 // Header format: `X-Dial-Signature: t=<unix_seconds>,v1=<hex>`
 // Signed payload: `${t}.${rawBody}` — HMAC-SHA256, hex-encoded.
-// Uses Node's crypto — the same primitive Dial's server signs with in
-// `frontend/src/lib/webhooks/signature.ts`, so verify + sign paths use
-// identical bytes.
+// Implemented with Node's stdlib crypto for a constant-time compare against
+// the signature Dial supplies on every webhook delivery.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 

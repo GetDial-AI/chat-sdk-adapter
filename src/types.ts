@@ -1,6 +1,5 @@
 // Public types for @getdial/chat-sdk-adapter.
-// The event-envelope types mirror the shape Dial's API emits — see
-// `frontend/src/lib/events/envelope.ts` in the Dial repo for the source spec.
+// The event-envelope types mirror the wire shape Dial's webhook API emits.
 
 import type { Logger } from "chat";
 
