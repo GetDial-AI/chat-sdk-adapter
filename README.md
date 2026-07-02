@@ -33,7 +33,7 @@ Get a Dial API key and a phone number ID from https://getdial.ai. Point that num
 | Inbound   | Voice call   | ✅ (as transcript) | — |
 | Outbound  | SMS / MMS / iMessage | ✅   | ✅ (via attachment URLs) |
 
-Voice calls surface as chat messages: when a completed call has a transcript, the adapter fetches it and forwards the text through the same `onNewMention` path as any other inbound message. Calls without a transcript surface a compact `[Voice call]` marker so the bot at least learns the call happened.
+**Only inbound voice calls surface as chat messages.** Chat SDK's Adapter interface has no primitive for a bot to *initiate* a phone call, so outbound-direction call events (calls placed via Dial's dashboard or REST API from the bot's number) are ignored — no `postMessage` variant fires them, and their transcripts are dropped rather than injected into the message stream. Inbound calls: when a completed call has a transcript, the adapter fetches it and forwards the text through `onNewMention`. Calls without a transcript surface a compact `[Voice call]` marker.
 
 ## Options
 
@@ -55,8 +55,9 @@ Point the Dial webhook subscription at the endpoint you handed to `chat.webhooks
 | Event                | Response |
 |----------------------|----------|
 | `message.received`   | Forwarded to the bot as a chat message. Media items become Chat SDK attachments (image / video / audio / file, keyed off `contentType`). |
-| `call.ended`         | If a transcript is coming (`transcriptAvailable: true`), waits for `call.transcribed` so the bot sees content rather than a bare ping. Otherwise synthesizes a `[Voice call]` message and forwards it. |
-| `call.transcribed`   | Fetches the full transcript via `@getdial/sdk.getCall()` and forwards it as a voice message. |
+| `call.ended` (inbound) | If a transcript is coming (`transcriptAvailable: true`), the event is swallowed and `call.transcribed` delivers the content shortly after. Otherwise a compact `[Voice call]` marker is forwarded. |
+| `call.ended` (outbound) | Dropped — 200 OK, not forwarded. Adapter surface is inbound-only. |
+| `call.transcribed`   | Fetches the call via `@getdial/sdk.getCall()`. Forwarded as a voice message only when `direction === "inbound"`. |
 | `webhook.ping`       | `200 OK`. Not forwarded — this is Dial's dashboard "test delivery" button. |
 
 Anything else is answered `200 OK` and ignored, so a future Dial event type doesn't break integrations before they upgrade.
@@ -92,13 +93,14 @@ Every distinct pair is a distinct thread. Chat SDK's per-thread state (conversat
 
 ## What the adapter can't do
 
-These operations throw `NotImplementedError` because the underlying channels don't support them:
+Honest limits, so nothing surprises you at runtime:
 
-- `editMessage` — SMS/MMS/iMessage have no server-side edit primitive.
-- `deleteMessage` — same reason.
-- `addReaction` / `removeReaction` — no cross-channel reaction API yet.
-
-`fetchMessages` currently returns an empty result. Live inbound messages still arrive via the webhook; only history backfill is affected.
+- **No outbound call initiation.** Chat SDK's Adapter interface is text-oriented — `postMessage` sends a text message, there's no `chat.startCall()`. If you need to place voice calls programmatically, use `@getdial/sdk` directly (`client.makeCall(...)`) alongside this adapter.
+- **`editMessage` throws `NotImplementedError`.** SMS/MMS/iMessage have no server-side edit primitive.
+- **`deleteMessage` throws `NotImplementedError`.** Same reason.
+- **`addReaction` / `removeReaction` throw `NotImplementedError`.** No cross-channel reaction API today.
+- **`fetchMessages` returns an empty result.** The Dial SDK exposes `listMessages` with a `since` filter, but its cursor semantics don't map cleanly to Chat SDK's `FetchOptions` yet — live inbound still arrives via the webhook, so this only affects history backfill.
+- **`startTyping` is a no-op.** No channel here carries a typing indicator; the method is present to satisfy the interface.
 
 ## Design notes
 

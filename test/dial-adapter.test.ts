@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DialAdapter } from "../src/dial-adapter";
 import {
   callEndedNoTranscript,
+  callEndedOutbound,
   callEndedTranscriptPending,
   callTranscribed,
   iMessageInbound,
@@ -222,6 +223,26 @@ describe("DialAdapter — webhook routing", () => {
     const message = args?.[2] as { text: string };
     expect(message.text).toContain("Voice call transcript");
     expect(message.text).toContain("caller: hi");
+  });
+
+  it("drops call.ended with direction=outbound (adapter is inbound-only)", async () => {
+    const res = await adapter.handleWebhook(signedRequest(callEndedOutbound));
+    expect(res.status).toBe(200);
+    expect(chat.processMessage).not.toHaveBeenCalled();
+  });
+
+  it("drops call.transcribed when the fetched call is outbound", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: private client override in tests.
+    (adapter as any).client.getCall = vi.fn().mockResolvedValue({
+      id: "call_1",
+      from: NUMBERS.dial,
+      to: NUMBERS.peer,
+      direction: "outbound",
+      transcript: "agent: hi\ncallee: hello",
+    });
+    const res = await adapter.handleWebhook(signedRequest(callTranscribed));
+    expect(res.status).toBe(200);
+    expect(chat.processMessage).not.toHaveBeenCalled();
   });
 
   it("does not forward webhook.ping to the bot", async () => {

@@ -138,15 +138,42 @@ export const callEndedNoTranscript: DialWebhookEvent = {
 };
 
 export const callEndedTranscriptPending: DialWebhookEvent = {
-  ...callEndedNoTranscript,
   id: "evt_call_end_2",
+  object: "event",
+  type: "call.ended",
+  version: 1,
+  createdAt: "2026-07-02T09:03:00Z",
+  relatedObject: { id: "call_2", type: "call", url: "/api/v1/calls/call_2" },
   data: {
-    ...(callEndedNoTranscript.data as typeof callEndedNoTranscript.data & {
-      transcriptAvailable: boolean;
-    }),
+    callId: "call_2",
+    from: PEER_NUMBER,
+    to: DIAL_NUMBER,
+    direction: "inbound",
+    durationSeconds: 45,
+    status: "completed",
+    canceled: false,
     transcriptAvailable: true,
   },
-} as DialWebhookEvent;
+};
+
+export const callEndedOutbound: DialWebhookEvent = {
+  id: "evt_call_end_3",
+  object: "event",
+  type: "call.ended",
+  version: 1,
+  createdAt: "2026-07-02T09:10:00Z",
+  relatedObject: { id: "call_3", type: "call", url: "/api/v1/calls/call_3" },
+  data: {
+    callId: "call_3",
+    from: DIAL_NUMBER,
+    to: PEER_NUMBER,
+    direction: "outbound",
+    durationSeconds: 20,
+    status: "completed",
+    canceled: false,
+    transcriptAvailable: false,
+  },
+};
 
 export const callTranscribed: DialWebhookEvent = {
   id: "evt_call_transcribed_1",

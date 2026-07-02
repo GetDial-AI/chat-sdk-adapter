@@ -288,20 +288,27 @@ export class DialAdapter implements Adapter<ThreadHandle, DialRaw> {
     createdAt: string,
     options?: WebhookOptions,
   ): Response {
+    // The adapter surfaces INBOUND voice only — outbound-call initiation is not
+    // reachable through Chat SDK's Adapter interface, so we drop outbound events
+    // rather than forward transcripts the bot has no way to have caused.
+    if (data.direction !== "inbound") {
+      this.logger.debug("Ignoring outbound call.ended", { callId: data.callId });
+      return textResponse(200, "ignored (outbound)");
+    }
+
     // If a transcript is coming, wait for `call.transcribed` so the bot sees
     // content instead of a bare "call ended" ping. When no transcript will
-    // arrive, synthesize a compact voice message so the bot at least learns
-    // the call happened.
+    // arrive, synthesize a compact marker so the bot at least learns the call
+    // happened.
     if (data.transcriptAvailable) {
       this.logger.debug("call.ended: transcript pending", { callId: data.callId });
       return textResponse(200, "waiting for transcript");
     }
 
-    const isInbound = data.direction === "inbound";
     const duration =
       data.durationSeconds == null ? "unknown" : `${Math.round(data.durationSeconds)}s`;
     const status = data.canceled ? `${data.status} (canceled)` : data.status;
-    const body = `[Voice call] ${data.direction}, ${duration}, ${status}. No transcript available.`;
+    const body = `[Voice call] inbound, ${duration}, ${status}. No transcript available.`;
 
     this.pushToChat(
       {
@@ -312,7 +319,7 @@ export class DialAdapter implements Adapter<ThreadHandle, DialRaw> {
         to: data.to,
         body,
         media: [],
-        direction: isInbound ? "inbound" : "outbound",
+        direction: "inbound",
         createdAt,
       },
       options,
@@ -342,10 +349,17 @@ export class DialAdapter implements Adapter<ThreadHandle, DialRaw> {
       return textResponse(200, "transcript fetch failed");
     }
 
-    const direction = call.direction === "outbound" ? "outbound" : "inbound";
+    // Drop outbound-direction calls for the same reason as call.ended — the
+    // adapter has no primitive for the bot to have initiated an outbound call,
+    // so its transcript is not part of the adapter's surface.
+    if (call.direction !== "inbound") {
+      this.logger.debug("Ignoring outbound call.transcribed", { callId: data.callId });
+      return textResponse(200, "ignored (outbound)");
+    }
+
     const body = call.transcript
-      ? `[Voice call transcript — ${direction}]\n${call.transcript}`
-      : `[Voice call transcript — ${direction}] (empty)`;
+      ? `[Voice call transcript — inbound]\n${call.transcript}`
+      : `[Voice call transcript — inbound] (empty)`;
 
     this.pushToChat(
       {
@@ -356,7 +370,7 @@ export class DialAdapter implements Adapter<ThreadHandle, DialRaw> {
         to: call.to,
         body,
         media: [],
-        direction,
+        direction: "inbound",
         createdAt,
       },
       options,
