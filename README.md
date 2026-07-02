@@ -33,8 +33,6 @@ Get a Dial API key and a phone number ID from https://getdial.ai. Point that num
 | Inbound   | Voice call   | ✅ (as transcript) | — |
 | Outbound  | SMS / MMS / iMessage | ✅   | ✅ (via attachment URLs) |
 
-**Only inbound voice calls surface as chat messages.** Chat SDK's Adapter interface has no primitive for a bot to *initiate* a phone call, so outbound-direction call events (calls placed via Dial's dashboard or REST API from the bot's number) are ignored — no `postMessage` variant fires them, and their transcripts are dropped rather than injected into the message stream. Inbound calls: when a completed call has a transcript, the adapter fetches it and forwards the text through `onNewMention`. Calls without a transcript surface a compact `[Voice call]` marker.
-
 ## Configuration
 
 `createDialAdapter(config?)` reads the environment when a field is omitted. Explicit values always win.
