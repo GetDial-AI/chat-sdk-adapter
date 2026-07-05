@@ -53,7 +53,7 @@ Point the Dial webhook subscription at the endpoint you handed to `chat.webhooks
 | Event                | Response |
 |----------------------|----------|
 | `message.received`   | Forwarded to the bot as a chat message. Media items become Chat SDK attachments (image / video / audio / file, keyed off `contentType`). |
-| `call.ended` (inbound) | If a transcript is coming (`transcriptAvailable: true`), the event is swallowed and `call.transcribed` delivers the content shortly after. Otherwise a compact `[Voice call]` marker is forwarded. |
+| `call.ended` (inbound) | Swallowed — 200 OK, not forwarded. Bots only see voice as the transcript delivered by the subsequent `call.transcribed`; a "call ended" placeholder here would hold the Chat SDK per-thread lock and starve the real transcript event. Very short calls that never get a transcript therefore don't surface to the bot at all. |
 | `call.ended` (outbound) | Dropped — 200 OK, not forwarded. Adapter surface is inbound-only. |
 | `call.transcribed`   | Fetches the call via `@getdial/sdk.getCall()`. Forwarded as a voice message only when `direction === "inbound"`. |
 | `webhook.ping`       | `200 OK`. Not forwarded — this is Dial's dashboard "test delivery" button. |

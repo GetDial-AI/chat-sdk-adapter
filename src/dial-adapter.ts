@@ -285,8 +285,8 @@ export class DialAdapter implements Adapter<ThreadHandle, DialRaw> {
 
   private onCallEnded(
     data: DialCallEnded,
-    createdAt: string,
-    options?: WebhookOptions,
+    _createdAt: string,
+    _options?: WebhookOptions,
   ): Response {
     // The adapter surfaces INBOUND voice only — outbound-call initiation is not
     // reachable through Chat SDK's Adapter interface, so we drop outbound events
@@ -296,34 +296,20 @@ export class DialAdapter implements Adapter<ThreadHandle, DialRaw> {
       return textResponse(200, "ignored (outbound)");
     }
 
-    // If a transcript is coming, wait for `call.transcribed` so the bot sees
-    // content instead of a bare "call ended" ping. When no transcript will
-    // arrive, synthesize a compact marker so the bot at least learns the call
-    // happened.
-    if (data.transcriptAvailable) {
-      this.logger.debug("call.ended: transcript pending", { callId: data.callId });
-      return textResponse(200, "waiting for transcript");
-    }
-
-    const duration =
-      data.durationSeconds == null ? "unknown" : `${Math.round(data.durationSeconds)}s`;
-    const status = data.canceled ? `${data.status} (canceled)` : data.status;
-    const body = `[Voice call] inbound, ${duration}, ${status}. No transcript available.`;
-
-    this.pushToChat(
-      {
-        kind: "voice",
-        messageId: data.callId,
-        channel: "voice",
-        from: data.from,
-        to: data.to,
-        body,
-        media: [],
-        direction: "inbound",
-        createdAt,
-      },
-      options,
-    );
+    // Voice calls surface to the bot ONLY as their transcript via the subsequent
+    // `call.transcribed` event. Firing a placeholder here would (a) push an
+    // empty "a call happened" message the bot has no useful reply to, and (b)
+    // hold Chat SDK's per-thread lock through the reply, so a `call.transcribed`
+    // that races in during that window would be dropped by the lock — we saw
+    // this in E2E testing. Log and swallow; if no transcript ever materializes
+    // (very short call, etc.) the bot simply doesn't hear about the call, which
+    // matches how Chat SDK bots think ("messages, not signals").
+    this.logger.debug("call.ended (inbound): swallowed; awaiting call.transcribed", {
+      callId: data.callId,
+      durationSeconds: data.durationSeconds,
+      status: data.status,
+      canceled: data.canceled,
+    });
     return textResponse(200, "ok");
   }
 

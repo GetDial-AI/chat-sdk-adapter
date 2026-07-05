@@ -191,20 +191,16 @@ describe("DialAdapter — webhook routing", () => {
     expect(message.attachments[0]?.type).toBe("image");
   });
 
-  it("swallows the call.ended when a transcript is coming", async () => {
-    const res = await adapter.handleWebhook(signedRequest(callEndedTranscriptPending));
-    expect(res.status).toBe(200);
+  it("swallows every inbound call.ended (bot only sees the transcript)", async () => {
+    // Voice calls surface to the bot only via call.transcribed. call.ended is
+    // logged but never pushed to processMessage — firing a placeholder here
+    // would hold the Chat SDK thread lock and cause the actual transcript
+    // (delivered ~1s later) to be dropped as a lock conflict.
+    const withTranscript = await adapter.handleWebhook(signedRequest(callEndedTranscriptPending));
+    expect(withTranscript.status).toBe(200);
+    const withoutTranscript = await adapter.handleWebhook(signedRequest(callEndedNoTranscript));
+    expect(withoutTranscript.status).toBe(200);
     expect(chat.processMessage).not.toHaveBeenCalled();
-  });
-
-  it("synthesizes a voice message when call.ended has no transcript", async () => {
-    await adapter.handleWebhook(signedRequest(callEndedNoTranscript));
-    expect(chat.processMessage).toHaveBeenCalledTimes(1);
-    const args = (chat.processMessage as unknown as { mock: { calls: unknown[][] } })
-      .mock.calls[0];
-    const message = args?.[2] as { text: string };
-    expect(message.text).toContain("Voice call");
-    expect(message.text).toContain("inbound");
   });
 
   it("fetches the transcript on call.transcribed and forwards it", async () => {
