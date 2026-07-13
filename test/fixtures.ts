@@ -93,6 +93,46 @@ export const iMessageInbound: DialWebhookEvent = {
   },
 };
 
+export const reactionInbound: DialWebhookEvent = {
+  id: "evt_react_1",
+  object: "event",
+  type: "message.received",
+  version: 1,
+  createdAt: "2026-07-02T09:01:30Z",
+  relatedObject: { id: "msg_react_1", type: "message", url: null },
+  data: {
+    messageId: "msg_react_1",
+    from: PEER_NUMBER,
+    to: DIAL_NUMBER,
+    channel: "imessage",
+    body: "",
+    media: [],
+    source: "external",
+    replyToId: "msg_out_1",
+    reaction: "❤️",
+  },
+};
+
+export const threadedReplyInbound: DialWebhookEvent = {
+  id: "evt_reply_1",
+  object: "event",
+  type: "message.received",
+  version: 1,
+  createdAt: "2026-07-02T09:01:45Z",
+  relatedObject: { id: "msg_reply_1", type: "message", url: null },
+  data: {
+    messageId: "msg_reply_1",
+    from: PEER_NUMBER,
+    to: DIAL_NUMBER,
+    channel: "imessage",
+    body: "replying to your last message",
+    media: [],
+    source: "external",
+    replyToId: "msg_out_1",
+    reaction: null,
+  },
+};
+
 export const mmsInbound: DialWebhookEvent = {
   id: "evt_mms_1",
   object: "event",

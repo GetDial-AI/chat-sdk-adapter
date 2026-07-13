@@ -14,7 +14,9 @@ import type {
   Adapter,
   AdapterPostableMessage,
   Attachment,
+  ChannelInfo,
   ChatInstance,
+  EmojiValue,
   FetchOptions,
   FetchResult,
   FormattedContent,
@@ -22,7 +24,7 @@ import type {
   ThreadInfo,
   WebhookOptions,
 } from "chat";
-import { Message, NotImplementedError } from "chat";
+import { defaultEmojiResolver, Message, NotImplementedError } from "chat";
 import { resolveOptions } from "./config";
 import { DialFormatConverter } from "./format";
 import { ADAPTER_NAME, ADAPTER_VERSION } from "./identity";
@@ -268,6 +270,12 @@ export class DialAdapter implements Adapter<ThreadHandle, DialRaw> {
     createdAt: string,
     options?: WebhookOptions,
   ): Response {
+    // A reaction (iMessage Tapback) is not a message to reply to — surface it
+    // through Chat SDK's reaction pipeline so onReaction handlers fire.
+    if (data.reaction) {
+      return this.onReactionReceived(data, options);
+    }
+
     const raw: DialRaw = {
       kind: "text",
       messageId: data.messageId,
@@ -278,8 +286,51 @@ export class DialAdapter implements Adapter<ThreadHandle, DialRaw> {
       media: data.media,
       direction: "inbound",
       createdAt,
+      replyToId: data.replyToId ?? null,
     };
     this.pushToChat(raw, options);
+    return textResponse(200, "ok");
+  }
+
+  private onReactionReceived(
+    data: DialInboundMessage,
+    options?: WebhookOptions,
+  ): Response {
+    if (!data.replyToId) {
+      // The reaction targets a message Dial couldn't resolve (e.g. older than
+      // our history) — there is nothing to anchor the event to, so drop it.
+      this.logger.debug("Ignoring reaction with no resolvable target", {
+        messageId: data.messageId,
+      });
+      return textResponse(200, "ignored (no target)");
+    }
+    const chat = this.chat;
+    if (!chat) {
+      this.logger.error("Received webhook before initialize() was called");
+      return textResponse(500, "adapter not initialized");
+    }
+    const rawEmoji = data.reaction as string;
+    chat.processReaction(
+      {
+        added: true,
+        emoji: defaultEmojiResolver.fromGChat(rawEmoji),
+        rawEmoji,
+        messageId: data.replyToId,
+        threadId: this.encodeThreadId({
+          dialNumber: data.to,
+          peerNumber: data.from,
+        }),
+        user: {
+          userId: data.from,
+          userName: data.from,
+          fullName: data.from,
+          isBot: false,
+          isMe: false,
+        },
+        raw: data,
+      },
+      options,
+    );
     return textResponse(200, "ok");
   }
 
@@ -378,19 +429,94 @@ export class DialAdapter implements Adapter<ThreadHandle, DialRaw> {
   // ── Chat SDK optional / unsupported ───────────────────────────────────
 
   async fetchMessages(
-    _threadId: string,
-    _options?: FetchOptions,
+    threadId: string,
+    options?: FetchOptions,
   ): Promise<FetchResult<DialRaw>> {
-    // Dial exposes GET /api/v1/messages with a `since` filter, but Chat SDK's
-    // cursor-shaped FetchOptions doesn't line up with it cleanly yet. Bots
-    // still receive live inbound messages via the webhook — this only affects
-    // history backfill, which we'll wire once the mapping is settled.
-    return { messages: [] };
+    // Dial's GET /api/v1/messages returns the account's most recent messages
+    // (up to 100, newest first) with no per-peer filter or cursor, so the
+    // conversation is carved out client-side and there is never a nextCursor.
+    const { dialNumber, peerNumber } = this.decodeThreadId(threadId);
+    let rows: Awaited<ReturnType<DialClient["listMessages"]>>;
+    try {
+      rows = await this.client.listMessages({ numberId: this.opts.fromNumberId });
+    } catch (err) {
+      throw translateSdkError(err);
+    }
+
+    const inThread = rows.filter(
+      (row) =>
+        (row.from === peerNumber && row.to === dialNumber) ||
+        (row.from === dialNumber && row.to === peerNumber),
+    );
+    inThread.sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    const limited =
+      options?.limit && options.limit < inThread.length
+        ? inThread.slice(-options.limit)
+        : inThread;
+
+    return {
+      messages: limited.map((row) =>
+        this.parseMessage({
+          kind: "text",
+          messageId: row.id,
+          channel: (row.channel ?? "sms") as DialRaw["channel"],
+          from: row.from,
+          to: row.to,
+          body: row.body,
+          media: (row.media ?? []) as DialMediaItem[],
+          direction: row.direction === "outbound" ? "outbound" : "inbound",
+          createdAt: row.createdAt,
+          replyToId: (row as { replyToId?: string | null }).replyToId ?? null,
+        }),
+      ),
+    };
   }
 
-  async startTyping(): Promise<void> {
-    // No typing indicator exists on SMS / iMessage / voice; the method is
-    // required by the interface but has nothing to do.
+  async fetchChannelInfo(channelId: string): Promise<ChannelInfo> {
+    const parts = channelId.split(":");
+    if (parts.length !== 2 || parts[0] !== THREAD_PREFIX) {
+      throw new ValidationError(
+        NAMESPACE,
+        `Unrecognized channel id: ${channelId}. Expected ${THREAD_PREFIX}:<number>.`,
+      );
+    }
+    const dialNumber = parts[1] as string;
+    let numbers: Awaited<ReturnType<DialClient["listNumbers"]>>;
+    try {
+      numbers = await this.client.listNumbers();
+    } catch (err) {
+      throw translateSdkError(err);
+    }
+    const owned = numbers.find((n) => n.number === dialNumber);
+    return {
+      id: channelId,
+      name: owned?.nickname ?? dialNumber,
+      isDM: true,
+      metadata: {
+        number: dialNumber,
+        numberId: owned?.id ?? null,
+        capabilities: owned?.capabilities ?? null,
+      },
+    };
+  }
+
+  async startTyping(threadId: string): Promise<void> {
+    // Dial shows the indicator on iMessage numbers; standard SMS numbers
+    // accept the call and ignore it, so this is safe to fire unconditionally.
+    const { dialNumber, peerNumber } = this.decodeThreadId(threadId);
+    try {
+      await this.client.startTyping({
+        toNumber: peerNumber,
+        fromNumber: dialNumber,
+      });
+    } catch (err) {
+      // Typing is fire-and-forget decoration — never fail the caller over it.
+      this.logger.warn("Could not set typing indicator", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   renderFormatted(content: FormattedContent): string {
@@ -405,11 +531,27 @@ export class DialAdapter implements Adapter<ThreadHandle, DialRaw> {
     throw new NotImplementedError(NAMESPACE, "deleteMessage");
   }
 
-  async addReaction(): Promise<never> {
-    throw new NotImplementedError(NAMESPACE, "addReaction");
+  async addReaction(
+    _threadId: string,
+    messageId: string,
+    emoji: EmojiValue | string,
+  ): Promise<void> {
+    // Dial accepts a single emoji (or a named Tapback) and delivers it as a
+    // native Tapback on iMessage numbers, or as a plain emoji text on SMS.
+    // Note: on iMessage numbers the platform currently only allows reacting
+    // to INBOUND messages (the peer's), not the bot's own sends.
+    try {
+      await this.client.replyToMessage(messageId, {
+        reaction: defaultEmojiResolver.toGChat(emoji),
+      });
+    } catch (err) {
+      throw translateSdkError(err);
+    }
   }
 
   async removeReaction(): Promise<never> {
+    // Dial has no reaction-removal endpoint — a new Tapback replaces the old
+    // one, but nothing can retract it.
     throw new NotImplementedError(NAMESPACE, "removeReaction");
   }
 }
