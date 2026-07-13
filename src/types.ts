@@ -45,6 +45,17 @@ export interface DialInboundMessage {
   body: string;
   media: DialMediaItem[];
   source: "external" | "internal";
+  /**
+   * On iMessage numbers, when the inbound message is a threaded reply or a
+   * reaction targeting one of the account's messages: the targeted message's
+   * Dial id. Optional so payloads from older Dial deployments still parse.
+   */
+  replyToId?: string | null;
+  /**
+   * On iMessage numbers, when the inbound message is a reaction (Tapback):
+   * the reaction's emoji. `body` is empty for reactions.
+   */
+  reaction?: string | null;
 }
 
 export interface DialCallEnded {
@@ -91,4 +102,6 @@ export interface DialRaw {
   media: DialMediaItem[];
   direction: "inbound" | "outbound";
   createdAt: string;
+  /** Dial id of the message this one replies to (threaded replies), if any. */
+  replyToId?: string | null;
 }

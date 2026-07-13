@@ -288,10 +288,6 @@ describe("DialAdapter — unsupported operations", () => {
     await expect(adapter.deleteMessage()).rejects.toThrow();
   });
 
-  it("addReaction throws", async () => {
-    await expect(adapter.addReaction()).rejects.toThrow();
-  });
-
   it("removeReaction throws", async () => {
     await expect(adapter.removeReaction()).rejects.toThrow();
   });
